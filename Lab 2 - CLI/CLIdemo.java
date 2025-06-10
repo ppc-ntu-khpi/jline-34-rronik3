@@ -1,29 +1,20 @@
-package com.mybank.tui;
-
 import com.mybank.domain.Bank;
 import com.mybank.domain.CheckingAccount;
 import com.mybank.domain.Customer;
 import com.mybank.domain.SavingsAccount;
 import java.io.PrintWriter;
 import java.util.LinkedList;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.List;
+import java.io.File;
 
 import org.jline.reader.*;
 import org.jline.reader.impl.completer.*;
 import org.jline.utils.*;
 import org.fusesource.jansi.*;
 
-/**
- * Sample application to show how jLine can be used.
- *
- * @author sandarenu
- *
- */
-/**
- * Console client for 'Banking' example
- *
- * @author Alexander 'Taurus' Babich
- */
 public class CLIdemo {
 
     public static final String ANSI_RESET = "\u001B[0m";
@@ -76,6 +67,8 @@ public class CLIdemo {
                     System.out.println(ANSI_RED+"Your bank has no customers!"+ANSI_RESET);
                 }
 
+            } else if ("report".equals(line)) { // Нова команда
+                printCustomerReport();
             } else if (line.indexOf("customer") != -1) {
                 try {
                     int custNo = 0;
@@ -123,9 +116,9 @@ public class CLIdemo {
     private void printHelp() {
         System.out.println("help\t\t\t- Show help");
         System.out.println("customer\t\t- Show list of customers");
-        System.out.println("customer \'index\'\t- Show customer details");
+        System.out.println("customer 'index'\t- Show customer details");
+        System.out.println("report\t\t\t- Generate customer report");
         System.out.println("exit\t\t\t- Exit the app");
-
     }
 
     private String readLine(LineReader reader, String promtMessage) {
@@ -141,15 +134,92 @@ public class CLIdemo {
         }
     }
 
+    private void loadCustomersFromFile(String fileName) {
+        File file = new File(fileName);
+        if (!file.exists()) {
+            System.out.println(ANSI_RED + "File not found: " + fileName + ANSI_RESET);
+            return;
+        }
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            int numberOfCustomers = Integer.parseInt(br.readLine().trim()); // Перше число — кількість клієнтів
+            System.out.println("Number of customers: " + numberOfCustomers);
+
+            for (int i = 0; i < numberOfCustomers; i++) {
+                String line = br.readLine();
+                if (line == null || line.trim().isEmpty()) {
+                    System.out.println(ANSI_RED + "Error: Missing customer data at line " + (i + 2) + ANSI_RESET);
+                    continue;
+                }
+
+                String[] customerInfo = line.split("\t"); // Читаємо інформацію про клієнта
+                if (customerInfo.length < 3) {
+                    System.out.println(ANSI_RED + "Error: Invalid customer format at line " + (i + 2) + ANSI_RESET);
+                    continue;
+                }
+
+                String firstName = customerInfo[0].trim();
+                String lastName = customerInfo[1].trim();
+                int numberOfAccounts = Integer.parseInt(customerInfo[2].trim());
+
+                System.out.println("Adding customer: " + firstName + " " + lastName + " with " + numberOfAccounts + " accounts.");
+                Bank.addCustomer(firstName, lastName);
+
+                // Читаємо інформацію про рахунки клієнта
+                for (int j = 0; j < numberOfAccounts; j++) {
+                    line = br.readLine();
+                    if (line == null || line.trim().isEmpty()) {
+                        System.out.println(ANSI_RED + "Error: Missing account data for customer " + firstName + " " + lastName + ANSI_RESET);
+                        continue;
+                    }
+
+                    String[] accountInfo = line.split("\t");
+                    if (accountInfo.length < 3) {
+                        System.out.println(ANSI_RED + "Error: Invalid account format for customer " + firstName + " " + lastName + ANSI_RESET);
+                        continue;
+                    }
+
+                    String accountType = accountInfo[0].trim();
+                    double balance = Double.parseDouble(accountInfo[1].trim());
+
+                    if ("S".equalsIgnoreCase(accountType)) { // Savings Account
+                        double interestRate = Double.parseDouble(accountInfo[2].trim());
+                        System.out.println("Adding SavingsAccount with balance: " + balance + " and interest rate: " + interestRate);
+                        Bank.getCustomer(i).addAccount(new SavingsAccount(balance, interestRate));
+                    } else if ("C".equalsIgnoreCase(accountType)) { // Checking Account
+                        double overdraftLimit = Double.parseDouble(accountInfo[2].trim());
+                        System.out.println("Adding CheckingAccount with balance: " + balance + " and overdraft limit: " + overdraftLimit);
+                        Bank.getCustomer(i).addAccount(new CheckingAccount(balance, overdraftLimit));
+                    }
+                }
+            }
+        } catch (IOException | NumberFormatException e) {
+            System.out.println(ANSI_RED + "Error reading file: " + e.getMessage() + ANSI_RESET);
+        }
+    }
+
+    private void printCustomerReport() {
+        System.out.println("\nCUSTOMER REPORT");
+        System.out.println("-------------------------------");
+
+        for (int i = 0; i < Bank.getNumberOfCustomers(); i++) {
+            Customer customer = Bank.getCustomer(i);
+            System.out.println("Customer: " + customer.getLastName() + ", " + customer.getFirstName());
+
+            for (int j = 0; j < customer.getNumberOfAccounts(); j++) {
+                String accountType = customer.getAccount(j) instanceof CheckingAccount ? "Checking Account" : "Savings Account";
+                System.out.println("    " + accountType + ": balance = $" + customer.getAccount(j).getBalance());
+            }
+        }
+    }
+
     public static void main(String[] args) {
-
-        Bank.addCustomer("John", "Doe");
-        Bank.addCustomer("Fox", "Mulder");
-        Bank.getCustomer(0).addAccount(new CheckingAccount(2000));
-        Bank.getCustomer(1).addAccount(new SavingsAccount(1000, 3));
-
         CLIdemo shell = new CLIdemo();
         shell.init();
+
+        // Замість статичного додавання клієнтів
+        shell.loadCustomersFromFile("F:/jline-34-rronik3/data/test.dat");
+
         shell.run();
     }
 }
